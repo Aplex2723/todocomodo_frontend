@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { OpenAI } from 'openai';
 import { useLicenceContext  } from '../contexts/apiKeyContext';
@@ -18,11 +18,124 @@ export interface Message {
     role: Role;
 }
 
+export interface Property {
+    amenities: string;
+    area_m2: string;
+    bathrooms: string;
+    bedrooms: string;
+    broker_contact_1: string;
+    broker_contact_2: string | null;
+    broker_contact_3: string | null;
+    broker_name: string;
+    currency: string;
+    google_map_location: string;
+    half_bathrooms: string;
+    images: string[];  // Adjusted to array of strings
+    location: string;
+    parking_space: string;
+    price: string;
+    property_name: string;
+    property_type: string;
+    status: string;
+    url: string;
+}
+
+
 // Main hook for API interaction
 export const useApi = () => {
+    const parsePropertyMetadata = (metadata: any) => {
+        // Check if metadata exists and is an array
+        if (metadata && Array.isArray(metadata)) {
+            const parsedProperties: Property[] = metadata.map((item: any) => ({
+                amenities: item.amenities || '',
+                area_m2: item.area_m2 || '',
+                bathrooms: item.bathrooms || '',
+                bedrooms: item.bedrooms || '',
+                broker_contact_1: item.broker_contact_1 || '',
+                broker_contact_2: item.broker_contact_2 !== 'nan' ? item.broker_contact_2 : null,
+                broker_contact_3: item.broker_contact_3 !== 'nan' ? item.broker_contact_3 : null,
+                broker_name: item.broker_name || '',
+                currency: item.currency || '',
+                google_map_location: `https://www.google.com/maps?q=${encodeURIComponent(item.location)}&output=embed`,
+                half_bathrooms: item.half_bathrooms || '',
+                images: JSON.parse(item.images),  // Parsing images from JSON string
+                location: item.location || '',
+                parking_space: item.parking_space || '',
+                price: item.price || '',
+                property_name: item.property_name || '',
+                property_type: item.property_type || '',
+                status: item.status || '',
+                url: item.url || '',
+            }));
+
+            // Update state with parsed properties
+            setProperties(parsedProperties);
+            console.log(`Setting: ${parsedProperties}`)
+        } else {
+            Alert.alert('Data Error', 'Unexpected response structure from API.');
+            console.log("Unexpected response structure from API.")
+        }
+    }
 
     // State to store all chat messages
     const [messages, setMessages] = useState<Message[]>([]);
+    const [properties, setProperties] = useState<Property[]>([]);
+    // Function to fetch chat history from the API
+    const fetchChatHistory = async () => {
+        try {
+            const jwt = await getItem('token');
+            const headers = {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${jwt}`,
+            };
+
+            const response: AxiosResponse = await axios.get(`${BASE_URL}/get_chat_history`, { headers });
+            const data = response.data;
+
+            if (data && Array.isArray(data)) {
+                // Map over the data to convert it into an array of Message objects
+                const chatHistory: Message[] = data.map((item: any) => {
+                    const userMessage: Message = {
+                        content: item.user_message,
+                        role: Role.User,
+                    };
+
+                    const assistantMessage: Message = {
+                        content: item.bot_response,
+                        role: Role.Assistant,
+                    };
+
+                    return [userMessage, assistantMessage];
+                }).flat();
+
+                // Update messages state with the chat history
+                setMessages(chatHistory);
+
+                const lastChatEntry = data[data.length - 1];
+                console.log(lastChatEntry)
+                if (lastChatEntry && lastChatEntry.metadata) {
+                    console.log(lastChatEntry.metadata)
+                    parsePropertyMetadata(JSON.parse(lastChatEntry.metadata));
+                } else {
+                    console.log("not found")
+                }
+
+            } else {
+                Alert.alert('Data Error', 'Unexpected response structure from API.');
+                console.log("Unexpected response structure from API.");
+            }
+        } catch (error) {
+            // Handle any errors that occur during the request
+            const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+            Alert.alert('Error', errorMessage);
+            console.log(errorMessage);
+        }
+    };
+
+    // Fetching chat history when the component mounts
+    useEffect(() => {
+        fetchChatHistory();
+    }, []);
 
     // Function to get a completion from OpenAI
     const getCompletion = async (prompt: string) => {
@@ -53,6 +166,7 @@ export const useApi = () => {
             }
 
             const response: AxiosResponse = await axios.post(`${BASE_URL}/chat`, dataToSend, { headers });
+            const data = response.data;
             const aiResponse = response.data.response || 'An error occurred';
             console.log(response.data)
 
@@ -64,6 +178,8 @@ export const useApi = () => {
 
             // Update messages state with the new AI message
             setMessages((prevMessages) => [...prevMessages, aiMessage]);
+
+            parsePropertyMetadata(data.metadata)
 
         } catch (error) {
             // Handle any errors that occur during the completion request
@@ -80,95 +196,10 @@ export const useApi = () => {
         }
     };
 
-    // // Function to generate an image based on the user prompt
-    // const generateImage = async (prompt: string) => {
-
-    //     // Create a new user message with the prompt
-    //     const newUserMessage: Message = {
-    //         content: prompt,
-    //         role: Role.User,
-    //     };
-
-    //     // Update messages state with the new user message
-    //     const chatHistory = [...messages, newUserMessage];
-    //     setMessages(chatHistory);
-
-    //     try {
-    //         // Create OpenAI instance and generate an image
-    //         // (For a different model: https://platform.openai.com/docs/models)
-    //         // Using `dangerouslyAllowBrowser: true` option only for web environments
-    //         // to enable API key usage in the browser.
-    //         const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-    //         const response = await openai.images.generate({
-    //             model: 'dall-e-3',
-    //             prompt,
-    //             n: 1,
-    //             size: '1024x1024',
-    //         });
-
-    //         // Return the URL of the generated image
-    //         const imageUrl = response.data[0]?.url || 'An error occurred';
-
-    //         // Create a new AI message with the AI's response
-    //         const aiMessage: Message = {
-    //             content: imageUrl,
-    //             role: Role.Assistant,
-    //         };
-
-    //         // Update messages state with the new AI message
-    //         setMessages((prevMessages) => [...prevMessages, aiMessage]);
-
-    //     } catch (error) {
-    //         // Handle any errors that occur during the image generation request
-    //         const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-
-    //         const aiMessage: Message = {
-    //             content: errorMessage,
-    //             role: Role.Assistant,
-    //         };
-
-    //         // Update messages state with the error AI message
-    //         setMessages((prevMessages) => [...prevMessages, aiMessage]);
-    //     }
-    // };
-
-    // Function to convert speech to text using OpenAI
-    // const speechToText = async (audioUri: string) => {
-
-
-    //     try {
-    //         // Prepare form data for the request
-    //         const formData = new FormData();
-    //         const audioData = {
-    //             uri: audioUri,
-    //             type: 'audio/mp4',
-    //             name: 'audio/m4a',
-    //         };
-
-    //         // (For a different model: https://platform.openai.com/docs/models)
-    //         formData.append('model', 'whisper-1');
-    //         formData.append('file', audioData as unknown as Blob);
-
-    //         // Make a POST request to the OpenAI Whisper API
-    //         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    //             method: 'POST',
-    //             headers: {
-    //                 'Authorization': `Bearer ${apiKey}`,
-    //                 'Content-Type': 'multipart/form-data',
-    //             },
-    //             body: formData,
-    //         });
-
-    //         return response.json();
-
-    //     } catch (error) {
-    //         console.error('Error in speechToText:', error);
-    //     }
-    // };
-
 
     return {
         messages,
         getCompletion,
+        properties,
     };
 };

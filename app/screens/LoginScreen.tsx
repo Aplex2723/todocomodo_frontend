@@ -7,9 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Image, // Import Image component
 } from 'react-native';
 import { Text, Input, Button } from 'react-native-elements';
-import { AuthContext } from '../contexts/authContext';
+import { AuthContext } from '../contexts/authContext'
+import { Dimensions } from 'react-native';
+
+const { width } = Dimensions.get('window');
 
 const LoginScreen = ({ navigation }: any) => {
   const { login } = useContext(AuthContext);
@@ -40,8 +44,15 @@ const LoginScreen = ({ navigation }: any) => {
       behavior={Platform.select({ ios: 'padding', android: undefined })}
     >
       <View style={styles.innerContainer}>
+        {/* Add the Logo Image */}
+        <Image
+          source={require('../../assets/LogoPng/Original.png')} // Update the path to your logo image
+          style={styles.logo}
+          resizeMode="contain"
+        />
+
         <Text h3 style={styles.title}>
-          Welcome Back
+          TodoCopilot
         </Text>
 
         <Input
@@ -55,7 +66,7 @@ const LoginScreen = ({ navigation }: any) => {
         />
 
         <Input
-          placeholder="Password"
+          placeholder="Contrasena"
           leftIcon={{ type: 'material', name: 'lock' }}
           rightIcon={{
             type: 'material',
@@ -70,7 +81,7 @@ const LoginScreen = ({ navigation }: any) => {
         />
 
         <Button
-          title="Login"
+          title="Iniciar Sesión"
           onPress={handleLogin}
           loading={loading}
           buttonStyle={styles.button}
@@ -78,8 +89,8 @@ const LoginScreen = ({ navigation }: any) => {
 
         <TouchableOpacity onPress={() => navigation.navigate('Register')}>
           <Text style={styles.registerText}>
-            Don't have an account?{' '}
-            <Text style={styles.registerLink}>Register here</Text>.
+          ¿No tienes cuenta?
+            <Text style={styles.registerLink}>Registrate aquí</Text>.
           </Text>
         </TouchableOpacity>
       </View>
@@ -99,14 +110,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#fff', // Ensure white background for web
   },
+  logo: {
+    width: 100, // Adjust the width as needed
+    height: 100, // Adjust the height as needed
+    alignSelf: 'center',
+    marginBottom: 20, // Space between logo and title
+  },
   title: {
     textAlign: 'center',
     marginBottom: 40,
-    color: '#2089dc', // Primary color
+    color: '#FF6101', // Primary color
   },
   button: {
-    backgroundColor: '#2089dc',
+    backgroundColor: '#FF6101',
     marginTop: 20,
+    borderRadius: 20,
+    alignSelf: 'center',
+    width: width * 0.6, // 60% of the screen width
   },
   registerText: {
     textAlign: 'center',
@@ -114,7 +134,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   registerLink: {
-    color: '#2089dc',
-    fontWeight: 'bold',
+    color: '#FF6101',
   },
 });

@@ -1,11 +1,8 @@
-import { NavigationContainer } from '@react-navigation/native';
+// app/navigation/RootNavigator.tsx
+
+import React from 'react';
 import DrawerNavigation from './DrawerNavigation';
 
-
 export default function RootNavigator() {
-  return (
-      <NavigationContainer >
-        <DrawerNavigation />
-      </NavigationContainer>
-  );
+  return <DrawerNavigation />;
 }
