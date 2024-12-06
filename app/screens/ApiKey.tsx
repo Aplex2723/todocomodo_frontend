@@ -2,7 +2,6 @@ import { View, Text, Alert, StyleSheet, TextInput, Pressable } from 'react-nativ
 import React, { useState } from 'react';
 import Toast from 'react-native-root-toast';
 import * as WebBrowser from 'expo-web-browser';
-import { useApiKeyContext } from '../contexts/apiKeyContext';
 
 const ApiKeyPage = () => {
 

@@ -1,4 +1,4 @@
-// app/navigation/DrawerNavigation.tsx
+// DrawerNavigation.tsx
 
 import React, { useState, useContext } from 'react';
 import {
@@ -11,6 +11,7 @@ import {
     Switch,
     Image,
     Alert,
+    TouchableWithoutFeedback,
 } from 'react-native';
 import {
     DrawerContentComponentProps,
@@ -19,9 +20,11 @@ import {
     createDrawerNavigator,
 } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
-import Chat from '../screens/Chat';
+import ChatPage from '../screens/Chat'; 
 import ApiKeyPage from '../screens/ApiKey';
-import { AuthContext } from '../contexts/authContext'; // Adjust the path if necessary
+import { AuthContext } from '../contexts/authContext'; 
+import { useApi } from '../hooks/useApi'; 
+import { ThemeContext } from '../../App'; // Import the ThemeContext
 
 type DrawerParamList = {
     Chat: undefined;
@@ -31,13 +34,14 @@ type DrawerParamList = {
 const Drawer = createDrawerNavigator<DrawerParamList>();
 
 const CustomDrawerContent = (props: DrawerContentComponentProps) => {
+    const { colors } = useContext(ThemeContext);
     return (
-        <View style={styles.drawerContainer}>
+        <View style={[styles.drawerContainer, { backgroundColor: colors.background }]}>
             <DrawerContentScrollView {...props}>
                 <DrawerItem
                     label='Chat'
-                    labelStyle={styles.drawerItemLabel}
-                    icon={() => <Ionicons name='chatbubble-outline' size={24} color='white' />}
+                    labelStyle={[styles.drawerItemLabel, { color: colors.text }]}
+                    icon={() => <Ionicons name='chatbubble-outline' size={24} color={colors.text} />}
                     onPress={() => props.navigation.navigate('Chat')}
                 />
             </DrawerContentScrollView>
@@ -45,8 +49,8 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
             <View style={styles.footerContainer}>
                 <DrawerItem
                     label='Nuevo Chat'
-                    labelStyle={styles.drawerItemLabel}
-                    icon={() => <Ionicons name='key-outline' size={24} color='white' />}
+                    labelStyle={[styles.drawerItemLabel, { color: colors.text }]}
+                    icon={() => <Ionicons name='key-outline' size={24} color={colors.text} />}
                     onPress={() => props.navigation.navigate('ApiKeyPage')}
                 />
             </View>
@@ -56,15 +60,12 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
 
 const DrawerNavigation = () => {
     const { logout } = useContext(AuthContext);
-
-    // State for Configuration Modal
+    const { messages, getCompletion, resetChat, properties, setLicenceKey, saveLicenceKey, licenceKey, licenceKeyLoaded } = useApi();
     const [isConfigModalVisible, setConfigModalVisible] = useState(false);
-    // State for New Message Modal
     const [isNewMessageModalVisible, setNewMessageModalVisible] = useState(false);
-    // State for Theme Switching
-    const [isDarkTheme, setIsDarkTheme] = useState(false);
 
-    // Handlers to toggle modals
+    const { isDarkTheme, toggleTheme, colors } = useContext(ThemeContext);
+
     const toggleConfigModal = () => {
         setConfigModalVisible(!isConfigModalVisible);
     };
@@ -73,49 +74,58 @@ const DrawerNavigation = () => {
         setNewMessageModalVisible(!isNewMessageModalVisible);
     };
 
-    // Handler to toggle theme
-    const toggleTheme = () => {
-        setIsDarkTheme(previousState => !previousState);
-        // Add your theme switching logic here
+    // Handler para cerrar sesión
+    const handleLogout = async () => {
+        await logout();
     };
 
-    // Handler for logout
-    const handleLogout = async () => {
-        await logout()
-        
+    const handleConfirmResetChat = async () => {
+        setNewMessageModalVisible(false);
+        await resetChat();
     };
 
     return (
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
             <Drawer.Navigator
                 initialRouteName='Chat'
                 drawerContent={CustomDrawerContent}
                 screenOptions={({ navigation }) => ({
-                    headerTintColor: '#fff',
+                    headerTintColor: colors.text,
                     headerStyle: {
-                        backgroundColor: '#0D0D0D',
+                        backgroundColor: colors.headerBackground,
                     },
                     drawerType: 'front',
                     swipeEnabled: false,
                     headerLeft: () => (
                         <View>
-                            {/* Configuration Button */}
                             <TouchableOpacity onPress={toggleConfigModal} style={styles.headerButton}>
-                                <Ionicons name='cog-outline' size={24} color='white' />
+                                <Ionicons name='cog-outline' size={34} color={colors.orageColor1} />
                             </TouchableOpacity>
                         </View>
                     ),
                     headerRight: () => (
                         <View style={styles.headerRightContainer}>
-                            {/* New Message Button */}
                             <TouchableOpacity onPress={toggleNewMessageModal} style={styles.headerButton}>
-                                <Ionicons name='add-circle-outline' size={24} color='white' />
+                                <Ionicons name='add-circle-outline' size={34} color={colors.orageColor1} />
                             </TouchableOpacity>
                         </View>
                     ),
                 })}
             >
-                <Drawer.Screen name='Chat' component={Chat} />
+                <Drawer.Screen name='Chat'>
+                    {props => (
+                        <ChatPage
+                            {...props}
+                            messages={messages}
+                            getCompletion={getCompletion}
+                            properties={properties}
+                            setLicenceKey={setLicenceKey}
+                            saveLicenceKey={saveLicenceKey}
+                            licenceKey={licenceKey}
+                            licenceKeyLoaded={licenceKeyLoaded}
+                        />
+                    )}
+                </Drawer.Screen>
                 <Drawer.Screen
                     name='ApiKeyPage'
                     component={ApiKeyPage}
@@ -123,69 +133,74 @@ const DrawerNavigation = () => {
                 />
             </Drawer.Navigator>
 
-            {/* Configuration Modal */}
             <Modal
                 animationType="fade"
                 transparent={true}
                 visible={isConfigModalVisible}
                 onRequestClose={toggleConfigModal}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        {/* Header Title */}
-                        <Text style={styles.modalTitle}>Configuracion</Text>
+                <TouchableWithoutFeedback onPress={toggleConfigModal}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={[styles.modalContent, { backgroundColor: colors.modalContentBackground }]}>
+                                <Text style={[styles.modalTitle, { color: colors.text }]}>Configuración</Text>
 
-                        {/* Two-Column Layout: Profile Icon and Username */}
-                        <View style={styles.profileContainer}>
-                            <Image
-                                source={{ uri: 'https://example.com/profile-icon.png' }} // Replace with actual profile icon URL or local asset
-                                style={styles.profileIcon}
-                            />
-                            <Text style={styles.usernameText}>Username</Text> {/* Replace 'Username' with actual username */}
-                        </View>
+                                <View style={styles.profileContainer}>
+                                    <Image
+                                        source={{ uri: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }}
+                                        style={styles.profileIcon}
+                                    />
+                                    <Text style={[styles.usernameText, { color: colors.text }]}>Uziel</Text>
+                                </View>
 
-                        {/* Separator */}
-                        <View style={styles.separator} />
+                                <View style={[styles.separator, { backgroundColor: colors.border }]} />
+                                <View style={styles.themeContainer}>
+                                    <Text style={[styles.themeText, { color: colors.text }]}>Tema</Text>
+                                    <Switch
+                                        value={isDarkTheme}
+                                        onValueChange={toggleTheme}
+                                        trackColor={{ false: '#767577', true: '#81b0ff' }}
+                                        thumbColor={isDarkTheme ? '#f5dd4b' : '#f4f3f4'}
+                                    />
+                                </View>
 
-                        {/* Theme Switch */}
-                        <View style={styles.themeContainer}>
-                            <Text style={styles.themeText}>Tema</Text>
-                            <Switch
-                                value={isDarkTheme}
-                                onValueChange={toggleTheme}
-                                trackColor={{ false: '#767577', true: '#81b0ff' }}
-                                thumbColor={isDarkTheme ? '#f5dd4b' : '#f4f3f4'}
-                            />
-                        </View>
+                                <View style={[styles.separator, { backgroundColor: colors.border }]} />
 
-                        {/* Separator */}
-                        <View style={styles.separator} />
-
-                        {/* Cerrar Sesion Button */}
-                        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                            <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
-                        </TouchableOpacity>
+                                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                                    <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
                     </View>
-                </View>
+                </TouchableWithoutFeedback>
             </Modal>
 
-            {/* New Message Modal */}
             <Modal
                 animationType="fade"
                 transparent={true}
                 visible={isNewMessageModalVisible}
                 onRequestClose={toggleNewMessageModal}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>New Message</Text>
-                        {/* Add your new message form or content here */}
-                        <Text style={styles.modalText}>New message form goes here.</Text>
-                        <TouchableOpacity onPress={toggleNewMessageModal} style={styles.closeButton}>
-                            <Text style={styles.closeButtonText}>Close</Text>
-                        </TouchableOpacity>
+                <TouchableWithoutFeedback onPress={toggleNewMessageModal}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={[styles.modalContent, { backgroundColor: colors.modalContentBackground }]}>
+                                <Text style={[styles.modalTitle, { color: colors.text }]}>Confirmación</Text>
+                                <Text style={[styles.modalText, { color: colors.text }]}>¿Desea iniciar un nuevo chat?</Text>
+
+                                <View style={styles.confirmButtonsContainer}>
+                                    <TouchableOpacity onPress={handleConfirmResetChat} style={styles.confirmButton}>
+                                        <Text style={styles.confirmButtonText}>Sí</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity onPress={toggleNewMessageModal} style={styles.confirmButton}>
+                                        <Text style={styles.confirmButtonText}>No</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableWithoutFeedback>
                     </View>
-                </View>
+                </TouchableWithoutFeedback>
             </Modal>
         </SafeAreaView>
     );
@@ -194,15 +209,13 @@ const DrawerNavigation = () => {
 const styles = StyleSheet.create({
     drawerContainer: {
         flex: 1,
-        backgroundColor: '#171717',
         padding: 8,
         paddingTop: 16,
     },
     drawerItemLabel: {
-        color: '#fff',
+        // color is handled dynamically
     },
     footerContainer: {
-        borderTopColor: '#ffffff33',
         borderTopWidth: 1,
         marginBottom: 20,
         paddingTop: 10,
@@ -215,18 +228,21 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 10,
     },
-    // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
     },
     modalContent: {
         width: '80%',
-        backgroundColor: '#fff',
         borderRadius: 10,
         padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
     },
     modalTitle: {
         fontSize: 24,
@@ -251,7 +267,6 @@ const styles = StyleSheet.create({
     },
     separator: {
         height: 1,
-        backgroundColor: '#ccc',
         marginVertical: 10,
     },
     themeContainer: {
@@ -275,14 +290,19 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
-    // Existing Modal Styles for consistency
-    closeButton: {
-        backgroundColor: '#2089dc',
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 20,
+    confirmButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 15,
     },
-    closeButtonText: {
+    confirmButton: {
+        backgroundColor: '#FF6101',
+        paddingVertical: 10,
+        paddingHorizontal: 40,
+        borderRadius: 10,
+        marginHorizontal: 10,
+    },
+    confirmButtonText: {
         color: '#fff',
         fontSize: 16,
     },

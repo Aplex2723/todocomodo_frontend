@@ -28,7 +28,9 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
       try {
         const token = await getItem('token');
         if (token && !isTokenExpired(token)) {
+          setIsAuthenticated(true);
         } else {
+          await handleTokenRefresh();
         }
       } catch (error) {
         setIsAuthenticated(false);
@@ -103,12 +105,13 @@ export const AuthContextProvider = ({ children }: { children: React.ReactNode })
   const register = async (details: { username: string; email: string; password: string }): Promise<{ success: boolean; message: string }> => {
     try {
       const response = await axios.post(`${BASE_URL}/register`, details);
-      const { success, message } = response.data;
+      console.log(response)
+      const { data, status } = response;
 
-      if (success) {
-        return { success: true, message: message || 'Registration successful.' };
+      if (status === 201) {
+        return { success: true, message: data.message || 'Registration successful.' };
       } else {
-        return { success: false, message: message || 'Registration failed.' };
+        return { success: false, message: data.message || 'Registration failed.' };
       }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Registration failed. Please try again.';

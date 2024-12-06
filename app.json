@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "ChatGptAssistant",
-    "slug": "ChatGptAssistant",
-    "version": "1.0.0",
+    "name": "TodoComodo",
+    "slug": "TodoComodo",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,16 +15,23 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aplex27.TodoComodo"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.aplex27.TodoComodo"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "57715618-1d81-4f2f-93fe-ac14656ac2e1"
+      }
     }
   }
 }

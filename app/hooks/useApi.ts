@@ -1,18 +1,16 @@
+// app/hooks/useApi.tsx
+
 import { useState, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
-import { OpenAI } from 'openai';
-import { useLicenceContext  } from '../contexts/apiKeyContext';
 import axios, { AxiosResponse } from 'axios';
 import { BASE_URL } from '../config'; 
 import { getItem } from '../utils/storage';
 
-// Enum for message roles
 export enum Role {
     User = 'user',
     Assistant = 'assistant',
 }
 
-// Interface for messages
 export interface Message {
     content: string;
     role: Role;
@@ -30,7 +28,7 @@ export interface Property {
     currency: string;
     google_map_location: string;
     half_bathrooms: string;
-    images: string[];  // Adjusted to array of strings
+    images: string[];
     location: string;
     parking_space: string;
     price: string;
@@ -40,11 +38,13 @@ export interface Property {
     url: string;
 }
 
-
-// Main hook for API interaction
 export const useApi = () => {
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [properties, setProperties] = useState<Property[]>([]);
+    const [licenceKey, setLicenceKey] = useState<string>('');
+    const [licenceKeyLoaded, setLicenceKeyLoaded] = useState(false);
+
     const parsePropertyMetadata = (metadata: any) => {
-        // Check if metadata exists and is an array
         if (metadata && Array.isArray(metadata)) {
             const parsedProperties: Property[] = metadata.map((item: any) => ({
                 amenities: item.amenities || '',
@@ -58,7 +58,7 @@ export const useApi = () => {
                 currency: item.currency || '',
                 google_map_location: `https://www.google.com/maps?q=${encodeURIComponent(item.location)}&output=embed`,
                 half_bathrooms: item.half_bathrooms || '',
-                images: JSON.parse(item.images),  // Parsing images from JSON string
+                images: JSON.parse(item.images),
                 location: item.location || '',
                 parking_space: item.parking_space || '',
                 price: item.price || '',
@@ -68,19 +68,14 @@ export const useApi = () => {
                 url: item.url || '',
             }));
 
-            // Update state with parsed properties
             setProperties(parsedProperties);
-            console.log(`Setting: ${parsedProperties}`)
+            console.log(`Setting: ${parsedProperties}`);
         } else {
-            Alert.alert('Data Error', 'Unexpected response structure from API.');
-            console.log("Unexpected response structure from API.")
+            Alert.alert('Error de Datos', 'Estructura de respuesta inesperada desde la API.');
+            console.log("Estructura de respuesta inesperada desde la API.");
         }
-    }
+    };
 
-    // State to store all chat messages
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [properties, setProperties] = useState<Property[]>([]);
-    // Function to fetch chat history from the API
     const fetchChatHistory = async () => {
         try {
             const jwt = await getItem('token');
@@ -91,9 +86,7 @@ export const useApi = () => {
 
             const response: AxiosResponse = await axios.get(`${BASE_URL}/get_chat_history`, { headers });
             const data = response.data;
-
             if (data && Array.isArray(data)) {
-                // Map over the data to convert it into an array of Message objects
                 const chatHistory: Message[] = data.map((item: any) => {
                     const userMessage: Message = {
                         content: item.user_message,
@@ -108,98 +101,157 @@ export const useApi = () => {
                     return [userMessage, assistantMessage];
                 }).flat();
 
-                // Update messages state with the chat history
                 setMessages(chatHistory);
 
+                console.log(chatHistory)
+
                 const lastChatEntry = data[data.length - 1];
-                console.log(lastChatEntry)
+                console.log(`Last chat entry: ${lastChatEntry}`);
                 if (lastChatEntry && lastChatEntry.metadata) {
-                    console.log(lastChatEntry.metadata)
+                    console.log(lastChatEntry.metadata);
                     parsePropertyMetadata(JSON.parse(lastChatEntry.metadata));
                 } else {
-                    console.log("not found")
+                    console.log("No se encontró metadata");
                 }
 
             } else {
-                Alert.alert('Data Error', 'Unexpected response structure from API.');
-                console.log("Unexpected response structure from API.");
+                Alert.alert('Error de Datos', 'Estructura de respuesta inesperada desde la API.');
+                console.log("Estructura de respuesta inesperada desde la API.");
             }
         } catch (error) {
-            // Handle any errors that occur during the request
-            const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error';
             Alert.alert('Error', errorMessage);
             console.log(errorMessage);
         }
     };
 
-    // Fetching chat history when the component mounts
-    useEffect(() => {
-        fetchChatHistory();
-    }, []);
-
-    // Function to get a completion from OpenAI
     const getCompletion = async (prompt: string) => {
-
-        // Create a new user message with the prompt
         const userMessage: Message = {
             content: prompt,
             role: Role.User,
         };
 
-        // Update messages state with the new user message
         const chatHistory = [...messages, userMessage];
         setMessages(chatHistory);
 
         try {
-            const jwt = await getItem('token')
+            const jwt = await getItem('token');
             const headers = {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${jwt}`, // If needed
-              };
+                Authorization: `Bearer ${jwt}`,
+            };
 
             if (!prompt || typeof prompt !== 'string') {
-            throw new Error('Prompt is invalid');
+                throw new Error('El prompt es inválido');
             }
             
             const dataToSend = {
                 "message": prompt
-            }
+            };
 
             const response: AxiosResponse = await axios.post(`${BASE_URL}/chat`, dataToSend, { headers });
             const data = response.data;
-            const aiResponse = response.data.response || 'An error occurred';
-            console.log(response.data)
+            const aiResponse = response.data.response || 'Ocurrió un error';
+            console.log(response.data);
 
-            // Create a new AI message with the AI's response
             const aiMessage: Message = {
                 content: aiResponse,
                 role: Role.Assistant,
             };
 
-            // Update messages state with the new AI message
             setMessages((prevMessages) => [...prevMessages, aiMessage]);
 
-            parsePropertyMetadata(data.metadata)
+            parsePropertyMetadata(data.metadata);
 
         } catch (error) {
-            // Handle any errors that occur during the completion request
-            const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error';
 
-            // Create a new AI message with the error message
             const aiMessage: Message = {
                 content: errorMessage,
                 role: Role.Assistant,
             };
 
-            // Update messages state with the new AI message
             setMessages((prevMessages) => [...prevMessages, aiMessage]);
         }
     };
 
+    const resetChat = async () => {
+        try {
+            const jwt = await getItem('token');
+            const headers = {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${jwt}`,
+            };
+
+            const response: AxiosResponse = await axios.post(`${BASE_URL}/reset-chat`, {}, { headers });
+            if (response.status === 200) {
+                Alert.alert('Éxito', 'El chat ha sido reiniciado correctamente.');
+                setMessages([]);
+                setProperties([]);
+            } else {
+                Alert.alert('Error', 'No se pudo reiniciar el chat. Por favor, intenta nuevamente.');
+                console.log('Error al reiniciar el chat:', response.data);
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error';
+            Alert.alert('Error', `No se pudo reiniciar el chat: ${errorMessage}`);
+            console.log(errorMessage);
+        }
+    };
+
+    const fetchLicenceKey = async () => {
+        try {
+            const jwt = await getItem('token');
+            const headers = {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${jwt}`,
+            };
+    
+            const response: AxiosResponse = await axios.get(`${BASE_URL}/get_licence_key`, { headers });
+            const data = response.data;
+            if (data && typeof data.licence_key === 'string') {
+                setLicenceKey(data.licence_key);
+            } else {
+                setLicenceKey('');
+            }
+        } catch (error) {
+            console.log('Error fetching licence key', error);
+            setLicenceKey('');
+        } finally {
+            // Set licenceKeyLoaded to true after fetching
+            setLicenceKeyLoaded(true);
+        }
+    };    
+
+    const saveLicenceKey = async (key: string) => {
+        try {
+            const jwt = await getItem('token');
+            const headers = {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${jwt}`,
+            };
+            const body = { licence_key: key };
+            await axios.post(`${BASE_URL}/save_licence_key`, body, { headers });
+        } catch (error) {
+            console.log('Error saving licence key:', error);
+        }
+    };
+
+    useEffect(() => {
+        // Fetch licence key first
+        fetchLicenceKey();
+        // Then fetch chat history
+        fetchChatHistory();
+    }, []);
 
     return {
         messages,
         getCompletion,
         properties,
+        resetChat,
+        licenceKey, 
+        setLicenceKey, 
+        saveLicenceKey,
+        licenceKeyLoaded
     };
 };

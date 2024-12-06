@@ -1,5 +1,6 @@
 // app/screens/ChatPage.tsx
 
+import React, { useRef, useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -9,48 +10,55 @@ import {
   FlatList,
   ActivityIndicator,
   LayoutAnimation,
-  UIManager,
-  Platform,
   Image,
   Modal,
   TouchableOpacity
 } from 'react-native';
-import React, { useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Role, Message, useApi, Property } from '../hooks/useApi';
+import { Role, Message, Property } from '../hooks/useApi'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import userImage from '../../assets/user.png';
 import aiImage from '../../assets/LogoPng/Original.png';
-import { Dimensions } from 'react-native';
-import { colors } from '../utils/colors'
 import Markdown from 'react-native-markdown-display';
+import { WebView } from 'react-native-webview';
+import { ThemeContext } from '../../App'; // Import the ThemeContext
 
-// Get screen width
-const screenWidth = Dimensions.get('window').width;
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+type ChatPageProps = {
+  messages: Message[];
+  getCompletion: (prompt: string) => Promise<void>;
+  properties: Property[];
+  licenceKey: string; 
+  setLicenceKey: (val: string) => void;
+  saveLicenceKey: (key: string) => Promise<void>;
+  licenceKeyLoaded: boolean;
+};
 
-const ChatPage = () => {
+const ChatPage: React.FC<ChatPageProps> = ({
+  messages, getCompletion, properties, licenceKey,
+  setLicenceKey, saveLicenceKey, licenceKeyLoaded
+}) => {
+
+  const { colors } = useContext(ThemeContext);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
   const [isImageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [showLicenceModal, setShowLicenceModal] = useState(false);
+  const [tempLicenceKey, setTempLicenceKey] = useState('');
 
-  const { getCompletion, messages, properties } = useApi();
   const flatListRef = useRef<FlatList>(null);
 
-  // Handle sending a user message
+  useEffect(() => {
+    if (licenceKeyLoaded && !licenceKey) {
+      setShowLicenceModal(true);
+    } else {
+      setShowLicenceModal(false);
+    }
+  }, [licenceKey, licenceKeyLoaded]);
+
   const handleSendMessage = async () => {
     if (text.trim().length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
       const messageContent = text.trim();
       setText('');
       setLoading(true);
@@ -63,7 +71,21 @@ const ChatPage = () => {
     }
   };
 
-  // Render a single message in the chat
+  const validateLicenceKeyFormat = (key: string) => {
+    const pattern = /^[A-Za-z0-9_\-]{43}$/;
+    return pattern.test(key);
+  };
+
+  const handleLicenceKeySubmit = async () => {
+    if (validateLicenceKeyFormat(tempLicenceKey)) {
+      setLicenceKey(tempLicenceKey);
+      await saveLicenceKey(tempLicenceKey);
+      setShowLicenceModal(false);
+    } else {
+      alert('Formato de la clave de licencia no válido. Por favor, revisa e intenta de nuevo.');
+    }
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isUserMessage = item.role === Role.User;
 
@@ -72,29 +94,39 @@ const ChatPage = () => {
         style={[
           styles.messageContainer,
           isUserMessage
-            ? styles.userMessageContainer
-            : styles.aiMessageContainer,
+            ? [styles.userMessageContainer, { backgroundColor: colors.messageUserBackground }]
+            : [styles.aiMessageContainer, { backgroundColor: colors.messageAiBackground }]
         ]}
       >
-        <Image
-          source={isUserMessage ? userImage : aiImage}
-          style={isUserMessage ? styles.imageUser : styles.imageAI }
-        />
-      <View style={{ flex: 1 }}>
-        <Markdown
-          style={{
-            body: {
-              color: colors.text, // Matches your custom colors
-              fontSize: 16,
-            },
-            listItem: {
-              marginVertical: 5
-            }
-          }}
-        >
-          {item.content}
-        </Markdown>
-      </View>
+        {isUserMessage ? (
+          <>
+            <View style={{ flex: 1 }}>
+              <Markdown
+                style={{
+                  body: { color: colors.text, fontSize: 15 },
+                  listItem: { marginBottom: 5 }
+                }}
+              >
+                {item.content}
+              </Markdown>
+            </View>
+            <Image source={userImage} style={styles.imageUser} />
+          </>
+        ) : (
+          <>
+            <Image source={aiImage} style={styles.imageAI} />
+            <View style={{ flex: 1 }}>
+              <Markdown
+                style={{
+                  body: { color: colors.text, fontSize: 15 },
+                  listItem: { marginBottom: 5 }
+                }}
+              >
+                {item.content}
+              </Markdown>
+            </View>
+          </>
+        )}
       </View>
     );
   };
@@ -103,13 +135,13 @@ const ChatPage = () => {
     const amenities = item.amenities
       .split(',')
       .map((amenity, index) => (
-        <Text key={index} style={styles.amenityText}>
-          • {amenity.trim().charAt(0).toUpperCase()+amenity.trim().slice(1)}
+        <Text key={index} style={[styles.amenityText, { color: colors.propertyDesc }]}>
+          • {amenity.trim().charAt(0).toUpperCase() + amenity.trim().slice(1)}
         </Text>
       ));
-  
+
     return (
-      <View style={styles.propertyContainer}>
+      <View style={[styles.propertyContainer, { backgroundColor: colors.messageAiBackground, borderColor: colors.propertyBorder }]}>
         <View style={styles.propertyHeader}>
           <TouchableOpacity
             onPress={() => {
@@ -123,32 +155,46 @@ const ChatPage = () => {
             />
           </TouchableOpacity>
           <View style={styles.propertyInfo}>
-            <Text style={styles.propertyName}>{item.property_name}</Text>
-            <Text style={styles.propertyPrice}>
+            <Text style={[styles.propertyName, { color: colors.propertyName }]}>{item.property_name}</Text>
+            <Text style={[styles.propertyPrice, { color: colors.propertyPrice }]}>
               Precio: {item.price} {item.currency}
             </Text>
           </View>
         </View>
-  
-        <Text style={styles.propertyAddress}>{item.location}</Text>
-  
+
+        <Text style={[styles.propertyAddress, { color: colors.propertyDesc }]}>{item.location}</Text>
+
         <View style={styles.amenitiesContainer}>
           {amenities}
         </View>
-  
         <View style={styles.mapContainer}>
-        <iframe
-          src={item.google_map_location}
-          style={styles.map}
-          loading="lazy"
-        ></iframe>
+          <WebView
+            originWhitelist={['*']}
+            source={{
+              html: `
+                <html>
+                  <body style="margin:0;padding:0;">
+                    <iframe 
+                      width="600" 
+                      height="450" 
+                      frameborder="0" 
+                      style="border:0;width:100%;height:100%;" 
+                      src="${item.google_map_location}" 
+                      allowfullscreen>
+                    </iframe>
+                  </body>
+                </html>
+              `
+            }}
+            style={styles.map}
+          />
         </View>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {selectedImage && (
         <Modal
           visible={isImageModalVisible}
@@ -157,7 +203,7 @@ const ChatPage = () => {
           onRequestClose={() => setImageModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { backgroundColor: colors.modalContentBackground }]}>
               <Image
                 source={{ uri: selectedImage }}
                 style={styles.modalImage}
@@ -165,30 +211,66 @@ const ChatPage = () => {
               />
               <Pressable
                 onPress={() => setImageModalVisible(false)}
-                style={styles.closeButton}
+                style={[styles.closeButton, { backgroundColor: colors.closeButtonBackground }]}
               >
-                <Text style={styles.closeButtonText}>Close</Text>
+                <Text style={[styles.closeButtonText, { color: colors.closeButtonText }]}>Cerrar</Text>
               </Pressable>
             </View>
           </View>
         </Modal>
       )}
+
+      <Modal
+        visible={showLicenceModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.modalContentBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Ingrese su Clave de Licencia</Text>
+            <TextInput
+              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
+              placeholder="Clave de licencia"
+              placeholderTextColor={colors.placeholderText}
+              value={tempLicenceKey}
+              onChangeText={setTempLicenceKey}
+            />
+            <Pressable style={[styles.closeButton, { backgroundColor: colors.closeButtonBackground }]} onPress={handleLicenceKeySubmit}>
+              <Text style={[styles.closeButtonText, { color: colors.closeButtonText }]}>Confirmar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {messages.length === 0 && (
+        <View style={[styles.emptyChatContainer, { backgroundColor: colors.background }]}>
+          <Image 
+            source={require('../../assets/LogoPng/DarkChroma.png')}
+            style={styles.emptyChatImage}
+            resizeMode="contain"
+          />
+          <Text style={[styles.emptyChatText, { color: colors.placeholderText }]}>
+            Escribe algo para iniciar una conversacion
+          </Text>
+        </View>
+      )}
+
       <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item, index) => index.toString()}
+        keyExtractor={(_, index) => index.toString()}
         ListFooterComponent={
-          loading ? <ActivityIndicator style={styles.footerIndicator} /> : null
+          loading ? <ActivityIndicator style={styles.footerIndicator} color={colors.orageColor1} /> : null
         }
       />
       {showProperties && (
-        <View style={styles.sectionHeaderContainer}>
-          <Text style={styles.sectionHeader}>Lista de propiedades</Text>
+        <View style={[styles.sectionHeaderContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Text style={[styles.sectionHeader, { color: colors.sectionHeader }]}>Propiedades Recomendadas</Text>
         </View>
       )}
 
-      {/* Property Listings */}
       {showProperties && (
         <FlatList
           data={properties}
@@ -196,7 +278,8 @@ const ChatPage = () => {
           keyExtractor={(item, index) => index.toString()}
         />
       )}
-      <View style={styles.inputContainer}>
+
+      <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
         <Pressable
           onPress={() => {
             LayoutAnimation.configureNext(
@@ -206,25 +289,25 @@ const ChatPage = () => {
           }}
           style={styles.mapButton}
         >
-          <Ionicons name="map" size={24} color={colors.mapIconColor} /> {/* Updated */}
+          <Ionicons name="map" size={24} color={colors.mapIconColor} /> 
         </Pressable>
-        <View style={styles.inputWrapper}>
+        <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.inputBackground }]}>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { color: colors.text }]}
             value={text}
             onChangeText={setText}
-            placeholder="Message"
-            placeholderTextColor={colors.placeholderText} // Updated
+            placeholder="Escribe un mensaje"
+            placeholderTextColor={colors.placeholderText}
             editable={!loading}
             multiline
           />
         </View>
         <Pressable
-          style={styles.sendButton}
+          style={[styles.sendButton, { backgroundColor: colors.sendButtonBackground, borderColor: colors.border }]}
           onPress={handleSendMessage}
           disabled={loading}
         >
-          <Ionicons name="send" size={24} color={colors.sendIconColor} /> {/* Updated */}
+          <Ionicons name="send" size={24} color={colors.sendIconColor} /> 
         </Pressable>
       </View>
     </SafeAreaView>
@@ -234,79 +317,63 @@ const ChatPage = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background, // Updated
   },
   sectionHeaderContainer: {
     padding: 10,
-    backgroundColor: colors.background, 
     borderBottomWidth: 1,
-    borderColor: colors.border, 
-  },
-  header: {
-    alignItems: 'flex-end',
-    padding: 10,
-    backgroundColor: colors.headerBackground, // Optional: If you have a header
   },
   mapButton: {
     padding: 10,
-    borderRadius: 8, // Optional: Rounded corners for better aesthetics
+    borderRadius: 8,
   },
   inputContainer: {
     flexDirection: 'row',
     padding: 8,
-    backgroundColor: colors.inputBackground, // Updated
     borderTopWidth: 1,
-    borderColor: colors.border, // Updated
   },
   inputWrapper: {
     flex: 1,
     borderWidth: 2,
-    borderColor: colors.border, // Updated
     borderRadius: 16,
     minHeight: 40,
-    backgroundColor: colors.inputBackground, // Updated
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
   textInput: {
-    color: colors.text, // Updated
     fontSize: 16,
   },
   sendButton: {
-    backgroundColor: colors.sendButtonBackground, // Updated
     borderRadius: 99,
     padding: 12,
     marginLeft: 8,
     alignSelf: 'flex-end',
     borderWidth: 2,
-    borderColor: colors.border, // Updated
   },
   messageContainer: {
-    marginTop: 15,
     gap: 12,
     flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 16,
   },
   userMessageContainer: {
-    backgroundColor: colors.messageUserBackground, // Updated
-    borderRadius: 10, // Optional: Rounded corners
-    alignSelf: 'flex-end', // Align user messages to the right
+    alignSelf: 'flex-end',
     maxWidth: '80%',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    borderTopLeftRadius: 15,
+    borderBottomLeftRadius: 15,
     padding: 10,
   },
   aiMessageContainer: {
-    backgroundColor: colors.messageAiBackground, // Updated
-    borderRadius: 10, // Optional: Rounded corners
-    alignSelf: 'flex-start', // Align AI messages to the left
+    alignSelf: 'flex-start',
     maxWidth: '80%',
     padding: 10,
+    borderRadius: 10,
   },
   imageUser: {
     width: 40,
     height: 40,
-    borderRadius: 20, // Make images circular
+    borderRadius: 20,
   },
   imageAI: {
     width: 40,
@@ -316,24 +383,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flex: 1,
     flexWrap: 'wrap',
-    color: colors.text, // Updated
     alignSelf: 'center',
   },
   footerIndicator: {
-    marginTop: 20,
+    marginTop: 25,
   },
   sectionHeader: {
     fontSize: 20,
     fontWeight: 'bold',
     padding: 10,
-    color: colors.sectionHeader, // Updated
-    backgroundColor: colors.background, // Optional: Header background
   },
   propertyContainer: {
     padding: 15,
     borderBottomWidth: 1,
-    borderColor: colors.propertyBorder,
-    backgroundColor: colors.messageAiBackground,
   },
   propertyHeader: {
     flexDirection: 'row',
@@ -342,16 +404,13 @@ const styles = StyleSheet.create({
   propertyName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.propertyName,
     marginBottom: 5,
   },
   propertyPrice: {
     fontSize: 16,
-    color: colors.propertyPrice,
   },
   propertyAddress: {
     fontSize: 14,
-    color: colors.propertyDesc,
     marginBottom: 5,
   },
   amenitiesContainer: {
@@ -361,17 +420,11 @@ const styles = StyleSheet.create({
   },
   amenityText: {
     fontSize: 14,
-    color: colors.propertyDesc,
     marginRight: 10,
   },
-  propertyDesc: {
-    fontSize: 14,
-    marginBottom: 5,
-    color: colors.propertyDesc, // Updated
-  },
   propertyImage: {
-    width: 200, // Adjust width as needed
-    height: 200, // Adjust height as needed
+    width: 200,
+    height: 200,
     borderRadius: 10,
     marginRight: 10,
   },
@@ -380,11 +433,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   mapContainer: {
-    width: '100%', // Full width
-    height: 200, // Adjust height as needed
+    width: '100%',
+    height: 200,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: colors.background,
   },
   map: {
     width: '100%',
@@ -392,14 +444,11 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: colors.modalOverlay, // Updated
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     width: '90%',
-    height: '50%',
-    backgroundColor: colors.modalContentBackground, // White background
     borderRadius: 10,
     padding: 10,
     alignItems: 'center',
@@ -408,13 +457,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 10,
-    color: colors.text, // Updated
-  },
-  modalText: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-    color: colors.text, // Updated
   },
   modalImage: {
     width: '100%',
@@ -422,14 +464,30 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   closeButton: {
-    backgroundColor: colors.closeButtonBackground, // Updated to use color variable
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 20,
     marginTop: 10,
   },
   closeButtonText: {
-    color: colors.closeButtonText, // Updated
+    fontSize: 16,
+  },
+  emptyChatContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyChatImage: {
+    width: 200,
+    height: 200,
+    marginBottom: 20,
+  },
+  emptyChatText: {
+    textAlign: 'center',
     fontSize: 16,
   },
 });
